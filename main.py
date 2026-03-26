@@ -128,7 +128,7 @@ def webhook_handler():
     # --- Scrivi su GCS ---
     storage_client = storage.Client()
     bucket = storage_client.bucket(BUCKET_NAME)
-    blob_name = f"test_client_x/{source_param}/{dataset_id}.json"
+    blob_name = f"{source_param}/{dataset_id}.json"
     ndjson_data = "\n".join(json.dumps(r, ensure_ascii=False) for r in mapped)
 
     logger.info(f"💾 Scrivo file su GCS: gs://{BUCKET_NAME}/{blob_name}")
