@@ -125,6 +125,15 @@ def webhook_handler():
     else:
         return f"Unknown source '{source_param}'", 400
 
+    # --- Filtra record senza data ---
+    before = len(mapped)
+    mapped = [r for r in mapped if r.get("date") is not None]
+    logger.info(f"🧹 Record rimossi per data null: {before - len(mapped)} (rimasti: {len(mapped)})")
+
+    if not mapped:
+        logger.warning("⚠️ Nessun record valido dopo il filtraggio, skip")
+        return "No valid records", 200
+
     # --- Scrivi su GCS ---
     storage_client = storage.Client()
     bucket = storage_client.bucket(BUCKET_NAME)
