@@ -49,17 +49,33 @@ def generate_id_from_trustpilot(rec):
     return hashlib.md5(base_str.encode('utf-8')).hexdigest()
 
 
+def map_sentiment(rating, sentiment):
+    """Se sentiment è null, lo calcola dal rating."""
+    if sentiment:
+        return sentiment
+    if rating in (1, 2):
+        return "Negativo"
+    elif rating == 3:
+        return "Neutro"
+    elif rating in (4, 5):
+        return "Positivo"
+    return None
+
+
 # --- Funzioni di mapping per canale ---
 def map_record_gmb(rec):
+    rating = safe_int(rec.get("stars"))
+    sentiment = rec.get("sentiment") or None
     return {
         "source": "gmb",
         "review_id": str(rec.get("reviewId") or "").strip(),
         "date": rec.get("publishedAtDate"),
         "title": rec.get("title"),
         "city": rec.get("city"),
-        "rating": safe_int(rec.get("stars")),
+        "rating": rating,
         "text": rec.get("text"),
         "username": rec.get("name"),
+        "sentiment_": map_sentiment(rating, sentiment),
     }
 
 
@@ -162,6 +178,7 @@ def webhook_handler():
             bigquery.SchemaField("rating", "INTEGER"),
             bigquery.SchemaField("text", "STRING"),
             bigquery.SchemaField("username", "STRING"),
+            bigquery.SchemaField("sentiment_", "STRING"),
         ],
         source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
         write_disposition="WRITE_APPEND",
@@ -184,11 +201,11 @@ def webhook_handler():
     USING `{bq_client.project}.{BQ_DATASET}.eataly_dev` S
     ON TRIM(T.review_id) = TRIM(S.review_id) AND TRIM(T.source) = TRIM(S.source)
     WHEN NOT MATCHED THEN
-      INSERT (source, review_id, date, title, city, rating, text, username)
-      VALUES (S.source, S.review_id, S.date, S.title, S.city, S.rating, S.text, S.username)
+      INSERT (source, review_id, date, title, city, rating, text, username, sentiment_)
+      VALUES (S.source, S.review_id, S.date, S.title, S.city, S.rating, S.text, S.username, S.sentiment_)
     """
     try:
-        logger.info(f"🔄 Eseguo MERGE nella tabella finale test_client_x")
+        logger.info(f"🔄 Eseguo MERGE nella tabella finale eataly_prod")
         bq_client.query(merge_sql).result()
         logger.info("✅ MERGE completato")
 
