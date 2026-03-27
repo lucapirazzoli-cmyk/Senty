@@ -56,6 +56,7 @@ def map_record_gmb(rec):
         "review_id": str(rec.get("reviewId") or "").strip(),
         "date": rec.get("publishedAtDate"),
         "title": rec.get("title"),
+        "city": rec.get("city"),
         "rating": safe_int(rec.get("stars")),
         "text": rec.get("text"),
         "username": rec.get("name"),
@@ -157,6 +158,7 @@ def webhook_handler():
             bigquery.SchemaField("review_id", "STRING"),
             bigquery.SchemaField("date", "TIMESTAMP"),
             bigquery.SchemaField("title", "STRING"),
+            bigquery.SchemaField("city", "STRING"),
             bigquery.SchemaField("rating", "INTEGER"),
             bigquery.SchemaField("text", "STRING"),
             bigquery.SchemaField("username", "STRING"),
@@ -182,8 +184,8 @@ def webhook_handler():
     USING `{bq_client.project}.{BQ_DATASET}.eataly_dev` S
     ON TRIM(T.review_id) = TRIM(S.review_id) AND TRIM(T.source) = TRIM(S.source)
     WHEN NOT MATCHED THEN
-      INSERT (source, review_id, date, title, rating, text, username)
-      VALUES (S.source, S.review_id, S.date, S.title, S.rating, S.text, S.username)
+      INSERT (source, review_id, date, title, city, rating, text, username)
+      VALUES (S.source, S.review_id, S.date, S.title, S.city, S.rating, S.text, S.username)
     """
     try:
         logger.info(f"🔄 Eseguo MERGE nella tabella finale test_client_x")
