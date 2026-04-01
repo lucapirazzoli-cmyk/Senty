@@ -100,7 +100,7 @@ def map_record_tripadvisor(rec):
     raw_date = rec.get("publishedDate")
     return {
         "source": "tripadvisor",
-        "review_id": str(rec.get("reviewId") or "").strip(),
+        "review_id": str(rec.get("id") or "").strip(),
         "date": normalize_to_timestamp(raw_date),  # ← converte "YYYY-MM-DD" → "YYYY-MM-DDT00:00:00"
         "title": (rec.get("placeInfo") or {}).get("name"),
         "city": ((rec.get("placeInfo") or {}).get("addressObj") or {}).get("city"),
