@@ -62,6 +62,21 @@ def map_sentiment(rating, sentiment):
     return None
 
 
+def normalize_to_timestamp(date_str):
+    """
+    Converte una stringa data in formato timestamp compatibile con BigQuery.
+    Se la stringa è solo una data (YYYY-MM-DD), aggiunge T00:00:00.
+    Se è già un timestamp completo, la restituisce invariata.
+    """
+    if not date_str or not isinstance(date_str, str):
+        return date_str
+    date_str = date_str.strip()
+    # Formato puro YYYY-MM-DD (esattamente 10 caratteri)
+    if len(date_str) == 10 and date_str[4] == "-" and date_str[7] == "-":
+        return f"{date_str}T00:00:00"
+    return date_str
+
+
 # --- Funzioni di mapping per canale ---
 def map_record_gmb(rec):
     rating = safe_int(rec.get("stars"))
@@ -77,13 +92,18 @@ def map_record_gmb(rec):
         "username": rec.get("name"),
         "sentiment_": map_sentiment(rating, sentiment),
     }
+
+
 def map_record_tripadvisor(rec):
     rating = safe_int(rec.get("rating"))
     sentiment = rec.get("sentiment") or None
+    raw_date = rec.get("publishedDate")
     return {
         "source": "tripadvisor",
         "review_id": str(rec.get("reviewId") or "").strip(),
-        "date": rec.get("publishedDate"),
+        "date": normalize_to_timestamp(raw_date),  # ← converte "YYYY-MM-DD" → "YYYY-MM-DDT00:00:00"
+        "title": (rec.get("placeInfo") or {}).get("name"),
+        "city": ((rec.get("placeInfo") or {}).get("addressObj") or {}).get("city"),
         "rating": rating,
         "text": rec.get("text"),
         "username": (rec.get("user") or {}).get("name"),
