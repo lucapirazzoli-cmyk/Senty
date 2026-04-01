@@ -78,17 +78,17 @@ def map_record_gmb(rec):
         "sentiment_": map_sentiment(rating, sentiment),
     }
 def map_record_trustpilot(rec):
-    rating = safe_int(rec.get("stars"))
+    rating = safe_int(rec.get("rating"))
     sentiment = rec.get("sentiment") or None
     return {
         "source": "trustpilot",
         "review_id": str(rec.get("reviewId") or "").strip(),
         "date": rec.get("publishedDate"),
-        "title": rec.get("placeInfo.name"),
-        "city": rec.get("placeInfo.city"),
+        "title": (rec.get("placeInfo") or {}).get("name"),
+        "city": ((rec.get("placeInfo") or {}).get("addressObj") or {}).get("city"),
         "rating": rating,
         "text": rec.get("text"),
-        "username": rec.get("name"),
+        "username": (rec.get("user") or {}).get("name"),
         "sentiment_": map_sentiment(rating, sentiment),
     }
 
