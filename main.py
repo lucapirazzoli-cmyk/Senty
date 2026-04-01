@@ -84,8 +84,6 @@ def map_record_tripadvisor(rec):
         "source": "tripadvisor",
         "review_id": str(rec.get("reviewId") or "").strip(),
         "date": rec.get("publishedDate"),
-        "title": (rec.get("placeInfo") or {}).get("name"),
-        "city": ((rec.get("placeInfo") or {}).get("addressObj") or {}).get("city"),
         "rating": rating,
         "text": rec.get("text"),
         "username": (rec.get("user") or {}).get("name"),
