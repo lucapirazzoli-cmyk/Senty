@@ -77,7 +77,7 @@ def normalize_to_timestamp(date_str):
     return date_str
 
 
-# --- Funzioni di mapping per canale ---
+# Funzioni di mapping per canale
 def map_record_gmb(rec):
     rating = safe_int(rec.get("stars"))
     sentiment = rec.get("sentiment") or None
@@ -116,7 +116,7 @@ def webhook_handler():
     # --- Verifica secret ---
     secret = request.args.get("secret")
     if secret != WEBHOOK_SECRET:
-        logger.error("❌ Secret errato nel webhook")
+        logger.error("Secret errato nel webhook")
         return "Unauthorized", 403
 
     # --- Recupera source ---
@@ -127,9 +127,9 @@ def webhook_handler():
     # --- Ricezione payload ---
     try:
         data = request.get_json(force=True)
-        logger.info(f"📩 Payload ricevuto:\n{json.dumps(data, indent=2, ensure_ascii=False)}")
+        logger.info(f"Payload ricevuto:\n{json.dumps(data, indent=2, ensure_ascii=False)}")
     except Exception as e:
-        logger.exception("❌ Errore parsing JSON")
+        logger.exception("Errore parsing JSON")
         return f"Invalid JSON: {e}", 400
 
     # --- Estrazione datasetId ---
@@ -150,23 +150,23 @@ def webhook_handler():
             dataset_id, dataset_path = found
 
     if not dataset_id:
-        logger.error("❌ Dataset ID non trovato nel payload Apify")
+        logger.error("Dataset ID non trovato nel payload Apify")
         return "Missing dataset ID", 400
 
-    logger.info(f"✅ Dataset ID trovato: {dataset_id} (percorso: {dataset_path})")
+    logger.info(f"Dataset ID trovato: {dataset_id} (percorso: {dataset_path})")
 
     # --- Scarica dataset da Apify ---
     url = f"https://api.apify.com/v2/datasets/{dataset_id}/items?token={APIFY_TOKEN}&format=json"
-    logger.info(f"⬇️ Scarico dati da Apify: {url}")
+    logger.info(f"Scarico dati da Apify: {url}")
     try:
         resp = requests.get(url, timeout=60)
         resp.raise_for_status()
         raw_items = resp.json()
     except Exception as e:
-        logger.exception("❌ Errore durante il download dal dataset Apify")
+        logger.exception("Errore durante il download dal dataset Apify")
         return f"Error fetching dataset from Apify: {e}", 500
 
-    logger.info(f"📦 Numero recensioni scaricate: {len(raw_items)}")
+    logger.info(f"Numero recensioni scaricate: {len(raw_items)}")
 
     # --- Applica mapping ---
     if source_param == "gmb":
@@ -179,10 +179,10 @@ def webhook_handler():
     # --- Filtra record senza data ---
     before = len(mapped)
     mapped = [r for r in mapped if r.get("date") is not None]
-    logger.info(f"🧹 Record rimossi per data null: {before - len(mapped)} (rimasti: {len(mapped)})")
+    logger.info(f"Record rimossi per data null: {before - len(mapped)} (rimasti: {len(mapped)})")
 
     if not mapped:
-        logger.warning("⚠️ Nessun record valido dopo il filtraggio, skip")
+        logger.warning("Nessun record valido dopo il filtraggio, skip")
         return "No valid records", 200
 
     # --- Scrivi su GCS ---
@@ -191,12 +191,12 @@ def webhook_handler():
     blob_name = f"{source_param}/{dataset_id}.json"
     ndjson_data = "\n".join(json.dumps(r, ensure_ascii=False) for r in mapped)
 
-    logger.info(f"💾 Scrivo file su GCS: gs://{BUCKET_NAME}/{blob_name}")
+    logger.info(f"Scrivo file su GCS: gs://{BUCKET_NAME}/{blob_name}")
     try:
         blob = bucket.blob(blob_name)
         blob.upload_from_string(ndjson_data, content_type="application/json")
     except Exception as e:
-        logger.exception("❌ Errore durante il salvataggio su GCS")
+        logger.exception("Errore durante il salvataggio su GCS")
         return f"Error saving to GCS: {e}", 500
 
     # --- Carica in staging ---
@@ -221,12 +221,12 @@ def webhook_handler():
 
     try:
         gcs_uri = f"gs://{BUCKET_NAME}/{blob_name}"
-        logger.info(f"📤 LOAD in BigQuery staging: {staging_table} da {gcs_uri}")
+        logger.info(f"LOAD in BigQuery staging: {staging_table} da {gcs_uri}")
         load_job = bq_client.load_table_from_uri(gcs_uri, staging_table, job_config=job_config)
         load_job.result()
-        logger.info("✅ Caricamento in staging completato")
+        logger.info("Caricamento in staging completato")
     except Exception as e:
-        logger.exception("❌ Errore durante il caricamento in BigQuery")
+        logger.exception("Errore durante il caricamento in BigQuery")
         return f"Errore BigQuery LOAD: {e}", 500
 
     # --- MERGE ---
@@ -239,15 +239,15 @@ def webhook_handler():
       VALUES (S.source, S.review_id, S.date, S.title, S.city, S.rating, S.text, S.username, S.sentiment_)
     """
     try:
-        logger.info(f"🔄 Eseguo MERGE nella tabella finale eataly_prod")
+        logger.info(f"Eseguo MERGE nella tabella finale eataly_prod")
         bq_client.query(merge_sql).result()
-        logger.info("✅ MERGE completato")
+        logger.info("MERGE completato")
 
         # Pulizia staging
-        logger.info("🧹 Svuoto la tabella di staging")
+        logger.info("Svuoto la tabella di staging")
         bq_client.query(f"TRUNCATE TABLE `{BQ_DATASET}.eataly_dev`").result()
     except Exception as e:
-        logger.exception("❌ Errore durante il MERGE in BigQuery")
+        logger.exception("Errore durante il MERGE in BigQuery")
         return f"Errore BigQuery MERGE: {e}", 500
 
     return f"Processed {len(mapped)} reviews for {source_param}", 200
