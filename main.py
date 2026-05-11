@@ -91,6 +91,7 @@ def map_record_gmb(rec):
         "text": rec.get("text"),
         "username": rec.get("name"),
         "sentiment_": map_sentiment(rating, sentiment),
+        "address": rec.get("address"),
     }
 
 
@@ -213,6 +214,7 @@ def webhook_handler():
             bigquery.SchemaField("text", "STRING"),
             bigquery.SchemaField("username", "STRING"),
             bigquery.SchemaField("sentiment_", "STRING"),
+            bigquery.SchemaField("address", "STRING"),
         ],
         source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
         write_disposition="WRITE_APPEND",
