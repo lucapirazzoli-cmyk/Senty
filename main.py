@@ -237,8 +237,8 @@ def webhook_handler():
     USING `{bq_client.project}.{BQ_DATASET}.eataly_dev` S
     ON TRIM(T.review_id) = TRIM(S.review_id) AND TRIM(T.source) = TRIM(S.source)
     WHEN NOT MATCHED THEN
-      INSERT (source, review_id, date, title, city, rating, text, username, sentiment_)
-      VALUES (S.source, S.review_id, S.date, S.title, S.city, S.rating, S.text, S.username, S.sentiment_)
+      INSERT (source, review_id, date, title, city, rating, text, username, sentiment_, address)
+      VALUES (S.source, S.review_id, S.date, S.title, S.city, S.rating, S.text, S.username, S.sentiment_, S.address)
     """
     try:
         logger.info(f"Eseguo MERGE nella tabella finale eataly_prod")
