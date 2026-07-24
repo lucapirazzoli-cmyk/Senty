@@ -44,6 +44,13 @@ def safe_int(val):
         return None
 
 
+def safe_float(val):
+    try:
+        return float(val) if val is not None else None
+    except (ValueError, TypeError):
+        return None
+
+
 def generate_id_from_tripadvisor(rec):
     base_str = f"{rec.get('datePublished')}_{rec.get('authorName')}_{rec.get('reviewBody')}"
     return hashlib.md5(base_str.encode('utf-8')).hexdigest()
@@ -81,6 +88,7 @@ def normalize_to_timestamp(date_str):
 def map_record_gmb(rec):
     rating = safe_int(rec.get("stars"))
     sentiment = rec.get("sentiment") or None
+    location_obj = rec.get("location") or {}
     return {
         "source": "gmb",
         "review_id": str(rec.get("reviewId") or "").strip(),
@@ -92,6 +100,8 @@ def map_record_gmb(rec):
         "username": rec.get("name"),
         "sentiment_": map_sentiment(rating, sentiment),
         "address": rec.get("address"),
+        "latitudine": safe_float(location_obj.get("lat")),
+        "longitudine": safe_float(location_obj.get("lng")),
     }
 
 
@@ -99,16 +109,19 @@ def map_record_tripadvisor(rec):
     rating = safe_int(rec.get("rating"))
     sentiment = rec.get("sentiment") or None
     raw_date = rec.get("publishedDate")
+    place_info = rec.get("placeInfo") or {}
     return {
         "source": "tripadvisor",
         "review_id": str(rec.get("id") or "").strip(),
         "date": normalize_to_timestamp(raw_date),  # ← converte "YYYY-MM-DD" → "YYYY-MM-DDT00:00:00"
-        "title": (rec.get("placeInfo") or {}).get("name"),
-        "city": ((rec.get("placeInfo") or {}).get("addressObj") or {}).get("city"),
+        "title": place_info.get("name"),
+        "city": (place_info.get("addressObj") or {}).get("city"),
         "rating": rating,
         "text": rec.get("text"),
         "username": (rec.get("user") or {}).get("name"),
         "sentiment_": map_sentiment(rating, sentiment),
+        "latitudine": safe_float(place_info.get("latitude")),
+        "longitudine": safe_float(place_info.get("longitude")),
     }
 
 
@@ -215,6 +228,8 @@ def webhook_handler():
             bigquery.SchemaField("username", "STRING"),
             bigquery.SchemaField("sentiment_", "STRING"),
             bigquery.SchemaField("address", "STRING"),
+            bigquery.SchemaField("latitudine", "FLOAT"),
+            bigquery.SchemaField("longitudine", "FLOAT"),
         ],
         source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
         write_disposition="WRITE_APPEND",
@@ -237,8 +252,8 @@ def webhook_handler():
     USING `{bq_client.project}.{BQ_DATASET}.eataly_dev` S
     ON TRIM(T.review_id) = TRIM(S.review_id) AND TRIM(T.source) = TRIM(S.source)
     WHEN NOT MATCHED THEN
-      INSERT (source, review_id, date, title, city, rating, text, username, sentiment_, address)
-      VALUES (S.source, S.review_id, S.date, S.title, S.city, S.rating, S.text, S.username, S.sentiment_, S.address)
+      INSERT (source, review_id, date, title, city, rating, text, username, sentiment_, address, latitudine, longitudine)
+      VALUES (S.source, S.review_id, S.date, S.title, S.city, S.rating, S.text, S.username, S.sentiment_, S.address, S.latitudine, S.longitudine)
     """
     try:
         logger.info(f"Eseguo MERGE nella tabella finale eataly_prod")
@@ -253,6 +268,10 @@ def webhook_handler():
         return f"Errore BigQuery MERGE: {e}", 500
 
     return f"Processed {len(mapped)} reviews for {source_param}", 200
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 
 if __name__ == "__main__":
