@@ -15,6 +15,7 @@ APIFY_TOKEN = os.environ.get("APIFY_TOKEN")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 BUCKET_NAME = os.environ.get("BUCKET_NAME")
 BQ_DATASET = os.environ.get("BQ_DATASET")
+DEFAULT_BRAND = os.environ.get("DEFAULT_BRAND", "Eataly")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ def normalize_to_timestamp(date_str):
 
 
 # Funzioni di mapping per canale
-def map_record_gmb(rec):
+def map_record_gmb(rec, brand=DEFAULT_BRAND):
     rating = safe_int(rec.get("stars"))
     sentiment = rec.get("sentiment") or None
     location_obj = rec.get("location") or {}
@@ -102,10 +103,11 @@ def map_record_gmb(rec):
         "address": rec.get("address"),
         "latitudine": safe_float(location_obj.get("lat")),
         "longitudine": safe_float(location_obj.get("lng")),
+        "brands": brand,
     }
 
 
-def map_record_tripadvisor(rec):
+def map_record_tripadvisor(rec, brand=DEFAULT_BRAND):
     rating = safe_int(rec.get("rating"))
     sentiment = rec.get("sentiment") or None
     raw_date = rec.get("publishedDate")
@@ -122,6 +124,7 @@ def map_record_tripadvisor(rec):
         "sentiment_": map_sentiment(rating, sentiment),
         "latitudine": safe_float(place_info.get("latitude")),
         "longitudine": safe_float(place_info.get("longitude")),
+        "brands": brand,
     }
 
 
@@ -133,10 +136,13 @@ def webhook_handler():
         logger.error("Secret errato nel webhook")
         return "Unauthorized", 403
 
-    # --- Recupera source ---
+    # --- Recupera source e brand ---
     source_param = request.args.get("source")
     if not source_param:
         return "Missing source", 400
+
+    brand_param = (request.args.get("brand") or request.args.get("brands") or "").strip() or DEFAULT_BRAND
+    logger.info(f"Parametri ricevuti - source: {source_param}, brand: {brand_param}")
 
     # --- Ricezione payload ---
     try:
@@ -184,9 +190,9 @@ def webhook_handler():
 
     # --- Applica mapping ---
     if source_param == "gmb":
-        mapped = [map_record_gmb(r) for r in raw_items]
+        mapped = [map_record_gmb(r, brand=brand_param) for r in raw_items]
     elif source_param == "tripadvisor":
-        mapped = [map_record_tripadvisor(r) for r in raw_items]
+        mapped = [map_record_tripadvisor(r, brand=brand_param) for r in raw_items]
     else:
         return f"Unknown source '{source_param}'", 400
 
@@ -230,6 +236,7 @@ def webhook_handler():
             bigquery.SchemaField("address", "STRING"),
             bigquery.SchemaField("latitudine", "FLOAT"),
             bigquery.SchemaField("longitudine", "FLOAT"),
+            bigquery.SchemaField("brands", "STRING"),
         ],
         source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
         write_disposition="WRITE_APPEND",
@@ -252,8 +259,8 @@ def webhook_handler():
     USING `{bq_client.project}.{BQ_DATASET}.eataly_dev` S
     ON TRIM(T.review_id) = TRIM(S.review_id) AND TRIM(T.source) = TRIM(S.source)
     WHEN NOT MATCHED THEN
-      INSERT (source, review_id, date, title, city, rating, text, username, sentiment_, address, latitudine, longitudine)
-      VALUES (S.source, S.review_id, S.date, S.title, S.city, S.rating, S.text, S.username, S.sentiment_, S.address, S.latitudine, S.longitudine)
+      INSERT (source, review_id, date, title, city, rating, text, username, sentiment_, address, latitudine, longitudine, brands)
+      VALUES (S.source, S.review_id, S.date, S.title, S.city, S.rating, S.text, S.username, S.sentiment_, S.address, S.latitudine, S.longitudine, S.brands)
     """
     try:
         logger.info(f"Eseguo MERGE nella tabella finale eataly_prod")
@@ -267,11 +274,7 @@ def webhook_handler():
         logger.exception("Errore durante il MERGE in BigQuery")
         return f"Errore BigQuery MERGE: {e}", 500
 
-    return f"Processed {len(mapped)} reviews for {source_param}", 200
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    return f"Processed {len(mapped)} reviews for {source_param} (brand: {brand_param})", 200
 
 
 if __name__ == "__main__":
