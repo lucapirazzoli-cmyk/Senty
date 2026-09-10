@@ -107,6 +107,25 @@ def map_record_gmb(rec, brand=DEFAULT_BRAND):
     }
 
 
+def normalize_thefork_rating(val):
+    """
+    Normalizza il rating di TheFork (scala 1-10) nella scala a stelle 1-5 di BigQuery:
+    - 1-2 / 10 -> 1 stella
+    - 3-4 / 10 -> 2 stelle
+    - 5-6 / 10 -> 3 stelle
+    - 7-8 / 10 -> 4 stelle
+    - 9-10 / 10 -> 5 stelle
+    """
+    if val is None:
+        return None
+    try:
+        v = float(val)
+        normalized = int(round(v / 2.0))
+        return max(1, min(5, normalized))
+    except (ValueError, TypeError):
+        return None
+
+
 def map_record_tripadvisor(rec, brand=DEFAULT_BRAND):
     rating = safe_int(rec.get("rating"))
     sentiment = rec.get("sentiment") or None
@@ -124,6 +143,36 @@ def map_record_tripadvisor(rec, brand=DEFAULT_BRAND):
         "sentiment_": map_sentiment(rating, sentiment),
         "latitudine": safe_float(place_info.get("latitude")),
         "longitudine": safe_float(place_info.get("longitude")),
+        "brands": brand,
+    }
+
+
+def map_record_thefork(rec, brand=DEFAULT_BRAND):
+    raw_rating = rec.get("rating_value")
+    rating = normalize_thefork_rating(raw_rating)
+    sentiment = rec.get("sentiment") or None
+    raw_date = rec.get("created_at")
+    
+    # Gestione username con fallback su nome e cognome
+    username = rec.get("reviewer_username")
+    if not username:
+        fname = rec.get("reviewer_first_name") or ""
+        lname = rec.get("reviewer_last_name") or ""
+        username = f"{fname} {lname}".strip() or None
+
+    return {
+        "source": "thefork",
+        "review_id": str(rec.get("review_id") or "").strip(),
+        "date": normalize_to_timestamp(raw_date),
+        "title": rec.get("restaurant_name"),
+        "city": rec.get("restaurant_city"),
+        "rating": rating,
+        "text": rec.get("review_body"),
+        "username": username,
+        "sentiment_": map_sentiment(rating, sentiment),
+        "address": rec.get("restaurant_address"),
+        "latitudine": safe_float(rec.get("restaurant_latitude")),
+        "longitudine": safe_float(rec.get("restaurant_longitude")),
         "brands": brand,
     }
 
@@ -189,10 +238,13 @@ def webhook_handler():
     logger.info(f"Numero recensioni scaricate: {len(raw_items)}")
 
     # --- Applica mapping ---
-    if source_param == "gmb":
+    clean_source = source_param.lower().replace("_", "").strip()
+    if clean_source in ("gmb", "google"):
         mapped = [map_record_gmb(r, brand=brand_param) for r in raw_items]
-    elif source_param == "tripadvisor":
+    elif clean_source in ("tripadvisor", "ta"):
         mapped = [map_record_tripadvisor(r, brand=brand_param) for r in raw_items]
+    elif clean_source in ("thefork", "tf"):
+        mapped = [map_record_thefork(r, brand=brand_param) for r in raw_items]
     else:
         return f"Unknown source '{source_param}'", 400
 
